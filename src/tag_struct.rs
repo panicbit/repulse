@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use std::io::{Read, Write, Cursor};
+use std::io::{Read, Write, Cursor, BufRead};
 use anyhow::*;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 
@@ -75,6 +75,10 @@ impl TagStruct {
         self.put_value(Value::U32(value));
     }
 
+    pub fn put_string(&mut self, value: impl Into<Option<String>>) {
+        self.put_value(Value::String(value.into()))
+    }
+
     pub fn pop_arbitrary(&mut self) -> Result<Vec<u8>> {
         self.pop_value()?.into_arbitrary()
     }
@@ -88,16 +92,27 @@ impl TagStruct {
 pub enum Value {
     U8(u8),
     U32(u32),
+    String(Option<String>),
     Arbitrary(Vec<u8>),
 }
 
 impl Value {
-    fn read_from<R: Read>(reader: &mut R) -> Result<Self> {
+    fn read_from<R: Read + BufRead>(reader: &mut R) -> Result<Self> {
         let tag = reader.read_u8()?;
 
         Ok(match tag {
             tag::U8 => Value::U8(reader.read_u8()?),
             tag::U32 => Value::U32(reader.read_u32::<BE>()?),
+            tag::STRING_NULL => Value::String(None),
+            tag::STRING => {
+                let mut value = Vec::new();
+
+                reader.read_until(b'\0', &mut value)?;
+
+                let value = String::from_utf8(value)?;
+
+                Value::String(Some(value))
+            }
             tag::ARBITRARY => {
                 let len = reader.read_u32::<BE>()?;
                 let len = usize::try_from(len)
@@ -131,6 +146,21 @@ impl Value {
                 writer.write_u32::<BE>(len)?;
                 writer.write_all(value)?;
             },
+            Self::String(value) => {
+                match value {
+                    Some(value) => {
+                        writer.write_u8(tag::STRING)?;
+                        let value = truncate_to_before_first_null(value);
+                        writer.write_all(value.as_bytes())?;
+                        writer.write_u8(b'\0')?;
+                    },
+                    None => {
+                        writer.write_u8(tag::STRING_NULL)?;
+                        return Ok(());
+                    }
+                };
+
+            }
         }
 
         Ok(())
@@ -186,4 +216,8 @@ pub trait Pop: Sized {
 
 pub trait Put {
     fn put(self, tag_struct: &mut TagStruct);
+}
+
+fn truncate_to_before_first_null(s: &str) -> &str {
+    s.split('\0').next().unwrap()
 }

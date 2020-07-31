@@ -36,6 +36,22 @@ impl tag_struct::Put for Auth {
     }
 }
 
+pub struct PlaySample {
+    pub sink_index: u32,
+    pub sink_name: Option<String>,
+    pub volume: u32,
+    pub sample_name: String,
+}
+
+impl tag_struct::Put for PlaySample {
+    fn put(self, tag_struct: &mut TagStruct) {
+        tag_struct.put_u32(self.sink_index);
+        tag_struct.put_string(self.sink_name);
+        tag_struct.put_u32(self.volume);
+        tag_struct.put_string(self.sample_name);
+    }
+}
+
 #[derive(Debug)]
 pub struct AuthReply {
     pub protocol_version: u32,

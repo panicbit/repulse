@@ -14,6 +14,8 @@ use frame::Frame;
 mod error;
 use error::ErrorKind;
 
+pub const VOLUME_NORMAL: u32 = 0x10000;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cookie = load_cookie().await?;
@@ -23,7 +25,7 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         let frame = Frame::read_from(&mut reader).await.unwrap();
 
-        println!("{:#?}", frame);
+        // println!("{:#?}", frame);
 
         let mut packet = TagStruct::parse(&frame.data).unwrap();
         let command_header = packet.pop::<CommandHeader>().unwrap();
@@ -41,28 +43,58 @@ async fn main() -> Result<()> {
         println!("{:#?}", auth_reply);
 
         while let Ok(frame) = Frame::read_from(&mut reader).await {
-            println!("Received {:#?}", frame);
+            let mut packet = TagStruct::parse(&frame.data).unwrap();
+            let command_header = packet.pop::<CommandHeader>().unwrap();
+
+            println!("Received header: {:#?}", command_header);
+            println!("TagList: {:#?}", packet);
         }
 
         println!("Error reading");
     });
 
-    let protocol_version = 7;
-    let tag = 42;
-    let mut packet = TagStruct::new();
+    let protocol_version = 8;
+    let mut tag = 42;
+        
+    {
+        let mut packet = TagStruct::new();
 
-    packet.put(CommandHeader {
-        command_kind: CommandKind::Auth,
-        tag,
-    });
+        packet.put(CommandHeader {
+            command_kind: CommandKind::Auth,
+            tag,
+        });
 
-    packet.put(command::Auth {
-        protocol_version,
-        cookie,
-    });
+        tag += 1;
 
-    Frame::command(&packet)?
-        .write_to(&mut writer).await?;
+        packet.put(command::Auth {
+            protocol_version,
+            cookie,
+        });
+
+        Frame::command(&packet)?
+            .write_to(&mut writer).await?;
+    }
+
+    {
+        let mut packet = TagStruct::new();
+
+        packet.put(CommandHeader {
+            command_kind: CommandKind::PlaySample,
+            tag,
+        });
+
+        tag += 1;
+
+        packet.put(command::PlaySample {
+            sink_index: 0,
+            sink_name: None,
+            volume: VOLUME_NORMAL / 2,
+            sample_name: "screen-capture".into(),
+        });
+
+        Frame::command(&packet)?
+            .write_to(&mut writer).await?;
+    }
 
     time::delay_for(Duration::from_millis(1_000)).await;
 
