@@ -10,7 +10,7 @@ mod tag_struct;
 use tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume};
 
 mod command;
-use command::{CommandHeader, Tag, Command, AuthReply, CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply};
+use command::{CommandHeader, Tag, Command, AuthReply, CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply, CommandKind};
 
 mod frame;
 use frame::Frame;
@@ -51,7 +51,10 @@ async fn main() -> Result<()> {
             rate: 44100,
         },
         channel_map: ChannelMap {
-            positions: vec![ChannelPosition::FrontLeft, ChannelPosition::FrontRight],
+            positions: vec![
+                ChannelPosition::FrontLeft,
+                ChannelPosition::FrontRight,
+            ],
         },
         sink_ref: SinkRef::index(0),
         max_length: u32::MAX,
@@ -61,7 +64,10 @@ async fn main() -> Result<()> {
         min_req: u32::MAX,
         sync_id: 0,
         volume: ChannelVolume {
-            volumes: vec![VOLUME_NORMAL, VOLUME_NORMAL],
+            volumes: vec![
+                VOLUME_NORMAL / 2,
+                VOLUME_NORMAL / 2,
+            ],
         },
 
     })?.await?;
@@ -70,7 +76,23 @@ async fn main() -> Result<()> {
 
     println!("{:#?}", reply);
 
-    time::delay_for(Duration::from_millis(1_000)).await;
+    let data = include_bytes!("/tmp/audio.raw");
+
+    let bytes_per_second = 2 * 2 * 44100;
+    let mut interval = time::interval(Duration::from_secs(1));
+
+    for chunk in data.chunks(bytes_per_second) {
+        let frame = Frame {
+            channel: reply.index,
+            offset_hi: 0,
+            offset_low: 0,
+            flags: 0,
+            data: chunk.into(),
+        };
+
+        interval.next().await;
+        broker.send_frame(frame)?;
+    }
 
     Ok(())
 }
@@ -117,7 +139,16 @@ impl Broker {
                         let command_header = packet.pop::<CommandHeader>()?;
 
                         if !command_header.command_kind.is_reply() {
-                            eprintln!("Received non-reply command: {:?} (TODO)", command_header.command_kind);
+                            match command_header.command_kind {
+                                CommandKind::Request => {
+                                    eprintln!("[TODO] Received REQUEST: {:#?}", packet);
+                                    continue;
+                                },
+                                _ => {
+                                    eprintln!("[TODO] Received unhandled {:?}: {:#?}", command_header.command_kind, packet);
+                                    continue;
+                                }
+                            }
                         }
 
                         tag_struct_tx.lock()
@@ -189,6 +220,11 @@ impl Broker {
         Ok(async move {
             tag_struct_rx.await?
         })
+    }
+
+    fn send_frame(&mut self, frame: Frame) -> Result<()> {
+        self.frame_tx.try_send(frame)?;
+        Ok(())
     }
 
     fn next_tag(&mut self) -> Tag {
