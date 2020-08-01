@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use std::io::{Read, Write, Cursor, BufRead};
 use anyhow::*;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use crate::{channel::{ChannelPosition, CHANNELS_MAX}, sample::SampleFormat};
 
 #[derive(Debug, Default)]
 pub struct TagStruct {
@@ -63,8 +64,20 @@ impl TagStruct {
         self.values.push_back(value);
     }
 
+    pub fn pop_bool(&mut self) -> Result<bool> {
+        self.pop_value()?.into_bool()
+    }
+
+    pub fn put_bool(&mut self, value: bool) {
+        self.put_value(Value::Bool(value));
+    }
+
     pub fn pop_u8(&mut self) -> Result<u8> {
         self.pop_value()?.into_u8()
+    }
+
+    pub fn put_u8(&mut self, value: u8) {
+        self.put_value(Value::U8(value));
     }
 
     pub fn pop_u32(&mut self) -> Result<u32> {
@@ -86,14 +99,30 @@ impl TagStruct {
     pub fn put_arbitrary(&mut self, value: Vec<u8>) {
         self.put_value(Value::Arbitrary(value));
     }
+
+    pub fn put_channel_map(&mut self, value: ChannelMap) {
+        self.put_value(Value::ChannelMap(value));
+    }
+
+    pub fn put_sample_spec(&mut self, value: SampleSpec) {
+        self.put_value(Value::SampleSpec(value));
+    }
+
+    pub fn put_channel_volume(&mut self, value: ChannelVolume) {
+        self.put_value(Value::ChannelVolume(value));
+    }
 }
 
 #[derive(Debug)]
 pub enum Value {
+    Bool(bool),
     U8(u8),
     U32(u32),
     String(Option<String>),
     Arbitrary(Vec<u8>),
+    SampleSpec(SampleSpec),
+    ChannelMap(ChannelMap),
+    ChannelVolume(ChannelVolume),
 }
 
 impl Value {
@@ -101,6 +130,8 @@ impl Value {
         let tag = reader.read_u8()?;
 
         Ok(match tag {
+            tag::BOOLEAN_TRUE => Value::Bool(true),
+            tag::BOOLEAN_FALSE => Value::Bool(false),
             tag::U8 => Value::U8(reader.read_u8()?),
             tag::U32 => Value::U32(reader.read_u32::<BE>()?),
             tag::STRING_NULL => Value::String(None),
@@ -131,6 +162,10 @@ impl Value {
         W: Write,
     {
         match self {
+            Self::Bool(value) => match value {
+                true => writer.write_u8(tag::BOOLEAN_TRUE)?,
+                false => writer.write_u8(tag::BOOLEAN_FALSE)?,
+            },
             Self::U8(value) => {
                 writer.write_u8(tag::U8)?;
                 writer.write_u8(*value)?;
@@ -159,11 +194,43 @@ impl Value {
                         return Ok(());
                     }
                 };
+            },
+            Value::SampleSpec(spec) => {
+                writer.write_u8(tag::SAMPLE_SPEC)?;
+                writer.write_u8(spec.format.into())?;
+                writer.write_u8(spec.channels)?;
+                writer.write_u32::<BE>(spec.rate)?;
+            }
+            Value::ChannelMap(map) => {
+                writer.write_u8(tag::CHANNEL_MAP)?;
 
+                let num_channels = CHANNELS_MAX.min(map.positions.len());
+                writer.write_u8(num_channels as u8)?;
+
+                for &position in map.positions.iter().take(num_channels) {
+                    writer.write_u8(position.into())?;
+                }
+            }
+            Value::ChannelVolume(volume) => {
+                writer.write_u8(tag::CVOLUME)?;
+
+                let num_channels = CHANNELS_MAX.min(volume.volumes.len());
+                writer.write_u8(num_channels as u8)?;
+
+                for &volume in volume.volumes.iter().take(num_channels) {
+                    writer.write_u32::<BE>(volume)?;
+                }
             }
         }
 
         Ok(())
+    }
+
+    fn into_bool(self) -> Result<bool> {
+        match self {
+            Self::Bool(value) => Ok(value),
+            _ => bail!("Expected bool value"),
+        }
     }
 
     fn into_u8(self) -> Result<u8> {
@@ -186,6 +253,26 @@ impl Value {
             _ => bail!("Expected arbitrary value")
         }
     }
+}
+
+
+#[derive(Debug)]
+pub struct SampleSpec {
+    pub format: SampleFormat,
+    pub channels: u8,
+    pub rate: u32,
+}
+
+#[derive(Debug)]
+pub struct ChannelMap {
+    /// Channel positions
+    pub positions: Vec<ChannelPosition>, // Use SmallVec?
+}
+
+#[derive(Debug)]
+pub struct ChannelVolume {
+    /// Volume per channel
+    pub volumes: Vec<u32>, // Use SmallVec?
 }
 
 mod tag {

@@ -24,6 +24,10 @@ impl Frame {
         })
     }
 
+    pub fn is_command_frame(&self) -> bool {
+        self.channel == COMMAND_CHANNEL
+    }
+
     pub async fn write_to<W>(&self, writer: &mut W) -> Result<()>
     where
         W: AsyncWrite + Unpin,

@@ -1,11 +1,18 @@
 use num_enum::{TryFromPrimitive, IntoPrimitive};
 use anyhow::*;
-use crate::{tag_struct, TagStruct};
+use crate::{tag_struct, TagStruct, INVALID_INDEX};
+use tag_struct::{ChannelMap, SampleSpec, ChannelVolume};
+
+pub trait Command {
+    const KIND: CommandKind;
+}
+
+pub type Tag = u32;
 
 #[derive(Debug)]
 pub struct CommandHeader {
     pub command_kind: CommandKind,
-    pub tag: u32,
+    pub tag: Tag,
 }
 
 impl tag_struct::Pop for CommandHeader {
@@ -29,6 +36,10 @@ pub struct Auth {
     pub cookie: Vec<u8>,
 }
 
+impl Command for Auth {
+    const KIND: CommandKind = CommandKind::Auth;
+}
+
 impl tag_struct::Put for Auth {
     fn put(self, tag_struct: &mut TagStruct) {
         tag_struct.put_u32(self.protocol_version);
@@ -37,18 +48,42 @@ impl tag_struct::Put for Auth {
 }
 
 pub struct PlaySample {
-    pub sink_index: u32,
-    pub sink_name: Option<String>,
+    pub sink_ref: SinkRef,
     pub volume: u32,
     pub sample_name: String,
 }
 
+impl Command for PlaySample {
+    const KIND: CommandKind = CommandKind::PlaySample;
+}
+
 impl tag_struct::Put for PlaySample {
     fn put(self, tag_struct: &mut TagStruct) {
-        tag_struct.put_u32(self.sink_index);
-        tag_struct.put_string(self.sink_name);
+        let (sink_index, sink_name) = match self.sink_ref {
+            SinkRef::Index(index) => (index, None),
+            SinkRef::Name(name) => (INVALID_INDEX, Some(name)),
+        };
+
+        tag_struct.put_u32(sink_index);
+        tag_struct.put_string(sink_name);
         tag_struct.put_u32(self.volume);
         tag_struct.put_string(self.sample_name);
+    }
+}
+
+#[derive(Debug)]
+pub enum SinkRef {
+    Index(u32),
+    Name(String),
+}
+
+impl SinkRef {
+    pub fn index(index: u32) -> Self {
+        Self::Index(index)
+    }
+
+    pub fn name(name: impl Into<String>) -> Self {
+        Self::Name(name.into())
     }
 }
 
@@ -63,6 +98,51 @@ impl tag_struct::Pop for AuthReply {
             protocol_version: tag_struct.pop_u32().context("Missing version field")?,
         })
     }   
+}
+
+#[derive(Debug)]
+pub struct CreatePlaybackStream {
+    pub name: String,
+    pub sample_spec: SampleSpec, //PA_TAG_SAMPLE_SPEC, &ss,
+    pub channel_map: ChannelMap, //PA_TAG_CHANNEL_MAP, &map,
+    pub sink_ref: SinkRef,
+    //  pub sink_index: 0, // PA_TAG_U32, &sink_index,
+    //  pub sink_name: String, // PA_TAG_STRING, &sink_name,
+    pub max_length: u32,  // PA_TAG_U32, &attr.maxlength,
+    pub corked: bool, // PA_TAG_BOOLEAN, &corked,
+    pub t_length: u32, // PA_TAG_U32, &attr.tlength,
+    pub prebuf: u32, // PA_TAG_U32, &attr.prebuf,
+    pub min_req: u32, //PA_TAG_U32, &attr.minreq,
+    pub sync_id: u32, //PA_TAG_U32, &syncid,
+    pub volume: ChannelVolume, //PA_TAG_CVOLUME, &volume,
+}
+
+impl Command for CreatePlaybackStream {
+    const KIND: CommandKind = CommandKind::CreatePlaybackStream;
+}
+
+impl tag_struct::Put for CreatePlaybackStream {
+    fn put(self, tag_struct: &mut TagStruct) {
+        tag_struct.put_string(self.name);
+        tag_struct.put_sample_spec(self.sample_spec);
+        tag_struct.put_channel_map(self.channel_map);
+        
+        let (sink_index, sink_name) = match self.sink_ref {
+            SinkRef::Index(index) => (index, None),
+            SinkRef::Name(name) => (INVALID_INDEX, Some(name)),
+        };
+
+        tag_struct.put_u32(sink_index);
+        tag_struct.put_string(sink_name);
+
+        tag_struct.put_u32(self.max_length);
+        tag_struct.put_bool(self.corked);
+        tag_struct.put_u32(self.t_length);
+        tag_struct.put_u32(self.prebuf);
+        tag_struct.put_u32(self.min_req);
+        tag_struct.put_u32(self.sync_id);
+        tag_struct.put_channel_volume(self.volume);
+    }
 }
 
 #[derive(Debug, TryFromPrimitive, IntoPrimitive, Copy, Clone, PartialEq)]
