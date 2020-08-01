@@ -10,7 +10,7 @@ mod tag_struct;
 use tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume};
 
 mod command;
-use command::{CommandHeader, Tag, Command, AuthReply, CreatePlaybackStream, SinkRef};
+use command::{CommandHeader, Tag, Command, AuthReply, CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply};
 
 mod frame;
 use frame::Frame;
@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
 
     println!("{:#?}", reply);
 
-    let reply = broker.send_command(CreatePlaybackStream {
+    let mut reply = broker.send_command(CreatePlaybackStream {
         name: "🦀 Repulse - Native Rust Client 🦀".into(),
         sample_spec: SampleSpec {
             format: SampleFormat::S16LE,
@@ -66,9 +66,11 @@ async fn main() -> Result<()> {
 
     })?.await?;
 
-    println!("Create Playback Stream Reply: {:#?}", reply);
+    let reply = reply.pop::<CreatePlaybackStreamReply>()?;
 
-    time::delay_for(Duration::from_millis(10_000)).await;
+    println!("{:#?}", reply);
+
+    time::delay_for(Duration::from_millis(1_000)).await;
 
     Ok(())
 }

@@ -121,6 +121,23 @@ impl Command for CreatePlaybackStream {
     const KIND: CommandKind = CommandKind::CreatePlaybackStream;
 }
 
+#[derive(Debug)]
+pub struct CreatePlaybackStreamReply {
+    pub index: u32,
+    pub sink_input: u32,
+    pub missing: u32,
+}
+
+impl tag_struct::Pop for CreatePlaybackStreamReply {
+    fn pop(tag_struct: &mut TagStruct) -> Result<Self> {
+        Ok(Self {
+            index: tag_struct.pop_u32().context("Missing index field")?,
+            sink_input: tag_struct.pop_u32().context("Missing sink_input field")?,
+            missing: tag_struct.pop_u32().context("Missing missing field")?,
+        })
+    }
+}
+
 impl tag_struct::Put for CreatePlaybackStream {
     fn put(self, tag_struct: &mut TagStruct) {
         tag_struct.put_string(self.name);
