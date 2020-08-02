@@ -10,7 +10,7 @@ mod tag_struct;
 use tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume};
 
 mod command;
-use command::{CommandHeader, Tag, Command, AuthReply, CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply, CommandKind};
+use command::{CommandHeader, Tag, Command, AuthReply, CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply, CommandKind, GetServerInfoReply};
 
 mod frame;
 use frame::Frame;
@@ -34,14 +34,22 @@ async fn main() -> Result<()> {
 
     let mut broker = Broker::start(conn);
 
-    let mut reply = broker.send_command(command::Auth {
-        protocol_version: PROTOCOL_VERSION,
-        cookie,
-    })?.await?;
+    {
+        let mut reply = broker.send_command(command::Auth {
+            protocol_version: PROTOCOL_VERSION,
+            cookie,
+        })?.await?;
 
-    let reply = reply.pop::<AuthReply>()?;
+        let reply = reply.pop::<AuthReply>()?;
 
-    println!("{:#?}", reply);
+        eprintln!("{:#?}", reply);
+    }
+
+    {
+        let mut reply = broker.send_command(command::GetServerInfo)?.await?;
+        let reply = reply.pop::<GetServerInfoReply>()?;
+        eprintln!("{:#?}", reply);
+    }
 
     let mut reply = broker.send_command(CreatePlaybackStream {
         name: "🦀 Repulse - Native Rust Client 🦀".into(),
@@ -206,7 +214,7 @@ impl Broker {
     
         packet.put(command);
 
-        println!("Sending Packet: {:#?}", packet);
+        // eprintln!("Sending Packet: {:#?}", packet);
 
         let frame = Frame::command(&packet)?;
 

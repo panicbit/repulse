@@ -121,23 +121,6 @@ impl Command for CreatePlaybackStream {
     const KIND: CommandKind = CommandKind::CreatePlaybackStream;
 }
 
-#[derive(Debug)]
-pub struct CreatePlaybackStreamReply {
-    pub index: u32,
-    pub sink_input: u32,
-    pub missing: u32,
-}
-
-impl tag_struct::Pop for CreatePlaybackStreamReply {
-    fn pop(tag_struct: &mut TagStruct) -> Result<Self> {
-        Ok(Self {
-            index: tag_struct.pop_u32().context("Missing index field")?,
-            sink_input: tag_struct.pop_u32().context("Missing sink_input field")?,
-            missing: tag_struct.pop_u32().context("Missing missing field")?,
-        })
-    }
-}
-
 impl tag_struct::Put for CreatePlaybackStream {
     fn put(self, tag_struct: &mut TagStruct) {
         tag_struct.put_string(self.name);
@@ -159,6 +142,61 @@ impl tag_struct::Put for CreatePlaybackStream {
         tag_struct.put_u32(self.min_req);
         tag_struct.put_u32(self.sync_id);
         tag_struct.put_channel_volume(self.volume);
+    }
+}
+
+#[derive(Debug)]
+pub struct CreatePlaybackStreamReply {
+    pub index: u32,
+    pub sink_input: u32,
+    pub missing: u32,
+}
+
+impl tag_struct::Pop for CreatePlaybackStreamReply {
+    fn pop(tag_struct: &mut TagStruct) -> Result<Self> {
+        Ok(Self {
+            index: tag_struct.pop_u32().context("Missing index field")?,
+            sink_input: tag_struct.pop_u32().context("Missing sink_input field")?,
+            missing: tag_struct.pop_u32().context("Missing missing field")?,
+        })
+    }
+}
+
+pub struct GetServerInfo;
+
+impl Command for GetServerInfo {
+    const KIND: CommandKind = CommandKind::GetServerInfo;
+}
+
+impl tag_struct::Put for GetServerInfo {
+    fn put(self, _tag_struct: &mut TagStruct) {
+    }
+}
+
+#[derive(Debug)]
+pub struct GetServerInfoReply {
+    server_name: Option<String>,
+    server_version: Option<String>,
+    user_name: Option<String>,
+    host_name: Option<String>,
+    sample_spec: SampleSpec,
+    default_sink_name: Option<String>,
+    default_source_name: Option<String>,
+    instance_cookie: u32,
+}
+
+impl tag_struct::Pop for GetServerInfoReply {
+    fn pop(tag_struct: &mut TagStruct) -> Result<Self> {
+        Ok(Self {
+            server_name: tag_struct.pop_string()?,
+            server_version: tag_struct.pop_string()?,
+            user_name: tag_struct.pop_string()?,
+            host_name: tag_struct.pop_string()?,
+            sample_spec: tag_struct.pop_sample_spec()?,
+            default_sink_name: tag_struct.pop_string()?,
+            default_source_name: tag_struct.pop_string()?,
+            instance_cookie: tag_struct.pop_u32()?,
+        })
     }
 }
 

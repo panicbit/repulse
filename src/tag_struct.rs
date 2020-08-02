@@ -88,6 +88,10 @@ impl TagStruct {
         self.put_value(Value::U32(value));
     }
 
+    pub fn pop_string(&mut self) -> Result<Option<String>> {
+        self.pop_value()?.into_string()
+    }
+
     pub fn put_string(&mut self, value: impl Into<Option<String>>) {
         self.put_value(Value::String(value.into()))
     }
@@ -106,6 +110,10 @@ impl TagStruct {
 
     pub fn put_sample_spec(&mut self, value: SampleSpec) {
         self.put_value(Value::SampleSpec(value));
+    }
+
+    pub fn pop_sample_spec(&mut self) -> Result<SampleSpec> {
+        self.pop_value()?.into_sample_spec()
     }
 
     pub fn put_channel_volume(&mut self, value: ChannelVolume) {
@@ -140,7 +148,13 @@ impl Value {
 
                 reader.read_until(b'\0', &mut value)?;
 
-                let value = String::from_utf8(value)?;
+                let mut value = String::from_utf8(value)?;
+
+                if value.as_bytes().last() != Some(&b'\0') {
+                    bail!("String did not end with NULL");
+                }
+
+                value.pop();
 
                 Value::String(Some(value))
             }
@@ -153,6 +167,18 @@ impl Value {
 
                 Value::Arbitrary(value)
             },
+            tag::SAMPLE_SPEC => {
+                let value = SampleSpec {
+                    format: {
+                        let format = reader.read_u8()?;
+                        SampleFormat::try_from(format)?
+                    },
+                    channels:  reader.read_u8()?,
+                    rate: reader.read_u32::<BE>()?,
+                };
+
+                Value::SampleSpec(value)
+            }
             _ => bail!("Unimplemented tag '{}'", tag as char),
         })
     }
@@ -200,7 +226,7 @@ impl Value {
                 writer.write_u8(spec.format.into())?;
                 writer.write_u8(spec.channels)?;
                 writer.write_u32::<BE>(spec.rate)?;
-            }
+            },
             Value::ChannelMap(map) => {
                 writer.write_u8(tag::CHANNEL_MAP)?;
 
@@ -210,7 +236,7 @@ impl Value {
                 for &position in map.positions.iter().take(num_channels) {
                     writer.write_u8(position.into())?;
                 }
-            }
+            },
             Value::ChannelVolume(volume) => {
                 writer.write_u8(tag::CVOLUME)?;
 
@@ -220,7 +246,7 @@ impl Value {
                 for &volume in volume.volumes.iter().take(num_channels) {
                     writer.write_u32::<BE>(volume)?;
                 }
-            }
+            },
         }
 
         Ok(())
@@ -247,10 +273,24 @@ impl Value {
         }
     }
 
+    fn into_string(self) -> Result<Option<String>> {
+        match self {
+            Self::String(value) => Ok(value),
+            _ => bail!("Expected string value")
+        }
+    }
+
     fn into_arbitrary(self) -> Result<Vec<u8>> {
         match self {
             Self::Arbitrary(value) => Ok(value),
             _ => bail!("Expected arbitrary value")
+        }
+    }
+
+    fn into_sample_spec(self) -> Result<SampleSpec> {
+        match self {
+            Self::SampleSpec(value) => Ok(value),
+            _ => bail!("Expected sample spec value")
         }
     }
 }
