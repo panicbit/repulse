@@ -6,11 +6,14 @@ use tokio::{fs, io, net::UnixStream};
 use tokio::time::{self, Duration};
 use parking_lot::Mutex;
 
+mod client;
+use client::Client;
+
 mod tag_struct;
 use tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume};
 
 mod command;
-use command::{CommandHeader, Tag, Command, AuthReply, CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply, CommandKind, GetServerInfoReply};
+use command::{CommandHeader, Tag, Command, AuthReply, CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply, CommandKind, ServerInfo};
 
 mod frame;
 use frame::Frame;
@@ -29,29 +32,15 @@ pub const INVALID_INDEX: u32 = u32::MAX;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cookie = load_cookie().await?;
-    let conn = UnixStream::connect("/run/user/1000/pulse/native").await?;
+    let mut client = Client::connect().await
+        .context("Failed to create client")?;
 
-    let mut broker = Broker::start(conn);
+    let server_info = client.get_server_info().await
+        .context("Failed to get server info")?;
 
-    {
-        let mut reply = broker.send_command(command::Auth {
-            protocol_version: PROTOCOL_VERSION,
-            cookie,
-        })?.await?;
+    println!("{:#?}", server_info);
 
-        let reply = reply.pop::<AuthReply>()?;
-
-        eprintln!("{:#?}", reply);
-    }
-
-    {
-        let mut reply = broker.send_command(command::GetServerInfo)?.await?;
-        let reply = reply.pop::<GetServerInfoReply>()?;
-        eprintln!("{:#?}", reply);
-    }
-
-    let mut reply = broker.send_command(CreatePlaybackStream {
+    let mut reply = client.broker.send_command(CreatePlaybackStream {
         name: "🦀 Repulse - Native Rust Client 🦀".into(),
         sample_spec: SampleSpec {
             format: SampleFormat::S16LE,
@@ -99,7 +88,7 @@ async fn main() -> Result<()> {
         };
 
         interval.next().await;
-        broker.send_frame(frame)?;
+        client.broker.send_frame(frame)?;
     }
 
     Ok(())

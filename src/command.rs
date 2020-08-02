@@ -174,18 +174,18 @@ impl tag_struct::Put for GetServerInfo {
 }
 
 #[derive(Debug)]
-pub struct GetServerInfoReply {
-    server_name: Option<String>,
-    server_version: Option<String>,
-    user_name: Option<String>,
-    host_name: Option<String>,
-    sample_spec: SampleSpec,
-    default_sink_name: Option<String>,
-    default_source_name: Option<String>,
-    instance_cookie: u32,
+pub struct ServerInfo {
+    pub server_name: Option<String>,
+    pub server_version: Option<String>,
+    pub user_name: Option<String>,
+    pub host_name: Option<String>,
+    pub sample_spec: SampleSpec,
+    pub default_sink_name: Option<String>,
+    pub default_source_name: Option<String>,
+    pub instance_cookie: u32,
 }
 
-impl tag_struct::Pop for GetServerInfoReply {
+impl tag_struct::Pop for ServerInfo {
     fn pop(tag_struct: &mut TagStruct) -> Result<Self> {
         Ok(Self {
             server_name: tag_struct.pop_string()?,

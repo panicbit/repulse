@@ -40,6 +40,10 @@ impl TagStruct {
         Ok(())
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
     pub fn to_vec(&self) -> Result<Vec<u8>> {
         let mut data = Vec::new();
 
