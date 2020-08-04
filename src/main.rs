@@ -1,30 +1,30 @@
 use anyhow::*;
-use tokio::io::{AsyncRead, AsyncWrite};
 use futures::prelude::*;
-use futures::{pin_mut, channel::{oneshot, mpsc}};
-use tokio::{fs, io, net::UnixStream};
-use tokio::time::{self, Duration};
-use parking_lot::Mutex;
+use tokio::{
+    fs,
+    time::{self, Duration},
+};
+use crate::{
+    broker::Broker,
+    tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume},
+    command::{CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply},
+    frame::Frame,
+    sample::SampleFormat,
+    channel::ChannelPosition,
+};
 
-mod client;
-use client::Client;
+pub use crate::{
+    client::Client,
+};
 
+mod broker;
 mod tag_struct;
-use tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume};
-
+mod client;
 mod command;
-use command::{CommandHeader, Tag, Command, AuthReply, CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply, CommandKind, ServerInfo};
-
 mod frame;
-use frame::Frame;
-
 mod sample;
 mod channel;
-
 mod error;
-use std::{sync::Arc, collections::BTreeMap};
-use sample::SampleFormat;
-use channel::ChannelPosition;
 
 pub const VOLUME_NORMAL: u32 = 0x10000;
 pub const PROTOCOL_VERSION: u32 = 8;
@@ -92,150 +92,4 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-pub type Handler = Box<dyn FnOnce(TagStruct) -> Result<()>>;
-
-pub struct Broker {
-    tag_struct_tx: Arc<Mutex<BTreeMap<Tag, oneshot::Sender<Result<TagStruct>>>>>,
-    frame_tx: mpsc::Sender<Frame>,
-    tag: Tag,
-}
-
-impl Broker {
-    fn start<S>(stream: S) -> Self
-    where S: AsyncRead + AsyncWrite + Send + 'static,
-    {
-        let (mut reader, mut writer) = io::split(stream);
-        
-        let (frame_tx, frame_rx) = mpsc::channel(1024);
-
-        let tag_struct_tx = Arc::new(Mutex::new(BTreeMap::new()));
-
-        let broker = Self {
-            tag_struct_tx: tag_struct_tx.clone(),
-            frame_tx,
-            tag: 0,
-        };
-
-        // Reader
-        tokio::spawn({
-            let tag_struct_tx = tag_struct_tx.clone();
-
-            async move {
-                let read_loop = async {
-                    loop {
-                        let frame = Frame::read_from(&mut reader).await?;
-
-                        if !frame.is_command_frame() {
-                            eprintln!("Received non-command frame (TODO)");
-                            continue;
-                        }
-
-                        let mut packet = TagStruct::parse(&frame.data)?;
-                        let command_header = packet.pop::<CommandHeader>()?;
-
-                        if !command_header.command_kind.is_reply() {
-                            match command_header.command_kind {
-                                CommandKind::Request => {
-                                    eprintln!("[TODO] Received REQUEST: {:#?}", packet);
-                                    continue;
-                                },
-                                _ => {
-                                    eprintln!("[TODO] Received unhandled {:?}: {:#?}", command_header.command_kind, packet);
-                                    continue;
-                                }
-                            }
-                        }
-
-                        tag_struct_tx.lock()
-                            .remove(&command_header.tag)
-                            .context("Unknown tag received")?
-                            .send(Ok(packet))
-                            .ok();
-                    }
-
-                    #[allow(unreachable_code)]
-                    Result::<_>::Ok(())
-                };
-
-                if let Err(err) = read_loop.await {
-                    eprintln!("[read]: {:?}", err);
-                }
-
-                // Cancel pending senders
-                *tag_struct_tx.lock() = BTreeMap::new();
-            }
-        });
-
-        // Writer
-        tokio::spawn(async move {
-            pin_mut!(frame_rx);
-
-            while let Some(frame) = frame_rx.next().await {
-                if let Err(err) = frame.write_to(&mut writer).await {
-                    eprintln!("[write]: {:?}", err);
-                    // Cancel pending senders
-                    *tag_struct_tx.lock() = BTreeMap::new();
-                }
-            }
-
-            eprintln!("[write] Terminating");
-
-            Result::<_>::Ok(())
-        });
-
-        broker
-    }
-
-    fn send_command<C>(&mut self, command: C) -> Result<impl Future<Output = Result<TagStruct>>>
-    where
-        C: Command + tag_struct::Put,
-    {
-        let tag = self.next_tag();
-        let (tag_struct_tx, tag_struct_rx) = oneshot::channel();
-        let mut packet = TagStruct::new();
-
-        packet.put(CommandHeader {
-            command_kind: C::KIND,
-            tag,
-        });
-    
-        packet.put(command);
-
-        // eprintln!("Sending Packet: {:#?}", packet);
-
-        let frame = Frame::command(&packet)?;
-
-        self.tag_struct_tx.lock().insert(tag, tag_struct_tx);
-        self.frame_tx.try_send(frame)
-            .map_err(|err| {
-                self.tag_struct_tx.lock().remove(&tag);
-                err
-            })?;
-
-        Ok(async move {
-            tag_struct_rx.await?
-        })
-    }
-
-    fn send_frame(&mut self, frame: Frame) -> Result<()> {
-        self.frame_tx.try_send(frame)?;
-        Ok(())
-    }
-
-    fn next_tag(&mut self) -> Tag {
-        let res = self.tag;
-        self.tag += 1;
-        res
-    }
-}
-
-async fn load_cookie() -> Result<Vec<u8>> {
-    let path = dirs::config_dir()
-        .unwrap_or_default()
-        .join("pulse/cookie");
-    let cookie = fs::read(path).await?;
-
-    Ok(cookie)
 }
