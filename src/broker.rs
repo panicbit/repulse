@@ -14,12 +14,37 @@ use crate::{
 type ResponseTransmitter = oneshot::Sender<Result<TagStruct>>;
 
 pub struct Broker {
+    data: Arc<Mutex<BrokerData>>,
+}
+
+impl Broker {
+    pub(crate) fn start<S>(stream: S) -> Self
+    where S: AsyncRead + AsyncWrite + Send + 'static,
+    {
+        Self {
+            data: Arc::new(Mutex::new(BrokerData::start(stream)))
+        }
+    }
+
+    pub(crate) fn send_command<C>(&mut self, command: C) -> Result<impl Future<Output = Result<TagStruct>>>
+    where
+        C: Command + tag_struct::Put,
+    {
+        self.data.lock().send_command(command)
+    }
+
+    pub(crate) fn send_frame(&mut self, frame: Frame) -> Result<()> {
+        self.data.lock().send_frame(frame)
+    }
+}
+
+struct BrokerData {
     response_tx: Arc<Mutex<BTreeMap<Tag, ResponseTransmitter>>>,
     frame_tx: mpsc::Sender<Frame>,
     tag: Tag,
 }
 
-impl Broker {
+impl BrokerData {
     pub(crate) fn start<S>(stream: S) -> Self
     where S: AsyncRead + AsyncWrite + Send + 'static,
     {
@@ -29,7 +54,7 @@ impl Broker {
 
         let response_tx = Arc::new(Mutex::new(BTreeMap::new()));
 
-        let broker = Self {
+        let broker_data = Self {
             response_tx: response_tx.clone(),
             frame_tx,
             tag: 0,
@@ -102,7 +127,7 @@ impl Broker {
             Result::<_>::Ok(())
         });
 
-        broker
+        broker_data
     }
 
     pub(crate) fn send_command<C>(&mut self, command: C) -> Result<impl Future<Output = Result<TagStruct>>>
