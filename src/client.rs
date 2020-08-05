@@ -27,11 +27,11 @@ impl Client {
         Ok(client)
     }
 
-    pub async fn get_server_info(&mut self) -> Result<ServerInfo> {
+    pub async fn get_server_info(&self) -> Result<ServerInfo> {
         self.send_command::<_, ServerInfo>(command::GetServerInfo).await
     }
 
-    async fn send_command<C, R>(&mut self, command: C) -> Result<R>
+    async fn send_command<C, R>(&self, command: C) -> Result<R>
     where
         C: Command + tag_struct::Put,
         R: tag_struct::Pop,

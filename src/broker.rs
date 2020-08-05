@@ -54,14 +54,14 @@ impl Broker {
         }
     }
 
-    pub(crate) fn send_command<C>(&mut self, command: C) -> Result<impl Future<Output = Result<TagStruct>>>
+    pub(crate) fn send_command<C>(&self, command: C) -> Result<impl Future<Output = Result<TagStruct>>>
     where
         C: Command + tag_struct::Put,
     {
         self.data.lock().send_command(command)
     }
 
-    pub(crate) fn send_frame(&mut self, frame: Frame) -> Result<()> {
+    pub(crate) fn send_frame(&self, frame: Frame) -> Result<()> {
         self.data.lock().send_frame(frame)
     }
 

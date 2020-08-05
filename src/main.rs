@@ -32,7 +32,7 @@ pub const INVALID_INDEX: u32 = u32::MAX;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut client = Client::connect().await
+    let client = Client::connect().await
         .context("Failed to create client")?;
 
     let server_info = client.get_server_info().await
