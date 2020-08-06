@@ -5,7 +5,6 @@ use tokio::{
     time::{self, Duration},
 };
 use crate::{
-    broker::Broker,
     tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume},
     command::{CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply},
     frame::Frame,
@@ -40,7 +39,7 @@ async fn main() -> Result<()> {
 
     println!("{:#?}", server_info);
 
-    let mut reply = client.broker.send_command(CreatePlaybackStream {
+    let mut reply = client.send_command::<_, CreatePlaybackStreamReply>(CreatePlaybackStream {
         name: "🦀 Repulse - Native Rust Client 🦀".into(),
         sample_spec: SampleSpec {
             format: SampleFormat::S16LE,
@@ -67,9 +66,7 @@ async fn main() -> Result<()> {
             ],
         },
 
-    })?.await?;
-
-    let reply = reply.pop::<CreatePlaybackStreamReply>()?;
+    }).await?;
 
     println!("{:#?}", reply);
 
@@ -88,7 +85,7 @@ async fn main() -> Result<()> {
         };
 
         interval.next().await;
-        client.broker.send_frame(frame)?;
+        client.send_frame(frame).await?;
     }
 
     Ok(())
