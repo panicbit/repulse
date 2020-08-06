@@ -1,8 +1,8 @@
 use anyhow::*;
 use tokio::prelude::*;
 use crate::TagStruct;
-use tokio_util::codec::{FramedRead, Decoder};
-use bytes::{Buf, BytesMut};
+use tokio_util::codec;
+use bytes::{Buf, BytesMut, BufMut};
 use std::{mem::size_of, convert::TryFrom};
 
 pub const COMMAND_CHANNEL: u32 = u32::max_value();
@@ -31,30 +31,21 @@ impl Frame {
         self.channel == COMMAND_CHANNEL
     }
 
-    pub async fn write_to<W>(&self, writer: &mut W) -> Result<()>
-    where
-        W: AsyncWrite + Unpin,
-    {
-        writer.write_u32(self.data.len() as u32).await?;
-        writer.write_u32(self.channel).await?;
-        writer.write_u32(self.offset_hi).await?;
-        writer.write_u32(self.offset_low).await?;
-        writer.write_u32(self.flags).await?;
-        writer.write_all(&self.data).await?;
-        Ok(())
+    pub fn stream<R: AsyncRead>(reader: R) -> codec::FramedRead<R, Decoder> {
+        codec::FramedRead::new(reader, Decoder::default())
     }
 
-    pub fn stream<R: AsyncRead>(reader: R) -> FramedRead<R, FrameDecoder> {
-        FramedRead::new(reader, FrameDecoder::default())
+    pub fn sink<W: AsyncWrite>(writer: W) -> codec::FramedWrite<W, Encoder> {
+        codec::FramedWrite::new(writer, Encoder::default())
     }
 }
 
 #[derive(Default)]
-pub struct FrameDecoder {
+pub struct Decoder {
     data_len: Option<usize>,
 }
 
-impl Decoder for FrameDecoder {
+impl codec::Decoder for Decoder {
     type Item = Frame;
     type Error = Error;
 
@@ -92,5 +83,26 @@ impl Decoder for FrameDecoder {
             flags: src.get_u32(),
             data: src.split_to(data_len),
         })))
+    }
+}
+
+#[derive(Default)]
+pub struct Encoder(());
+
+impl codec::Encoder<Frame> for Encoder {
+    type Error = Error;
+
+    fn encode(&mut self, frame: Frame, dst: &mut BytesMut) -> Result<()> {
+        let len = u32::try_from(frame.data.len())
+            .context("Frame data size does not fit into 32 bits")?;
+
+        dst.put_u32(len);
+        dst.put_u32(frame.channel);
+        dst.put_u32(frame.offset_hi);
+        dst.put_u32(frame.offset_low);
+        dst.put_u32(frame.flags);
+        dst.put_slice(&frame.data);
+
+        Ok(())
     }
 }

@@ -60,7 +60,7 @@ where
 }
 
 async fn write_loop<W>(
-    mut writer: W,
+    writer: W,
     frame_rx: FrameReceiver,
     abort_handle: AbortHandle,
 )
@@ -69,8 +69,10 @@ where
 {
     pin_mut!(frame_rx);
 
+    let mut frame_writer = Frame::sink(writer);
+
     while let Some((frame, response_tx)) = frame_rx.next().await {
-        let result = frame.write_to(&mut writer).await
+        let result = frame_writer.send(frame).await
             .context("Failed to send frame");
         let error_occurred = result.is_err();
 
