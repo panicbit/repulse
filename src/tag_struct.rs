@@ -4,6 +4,7 @@ use std::io::{Read, Write, Cursor, BufRead};
 use anyhow::*;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use crate::{channel::{ChannelPosition, CHANNELS_MAX}, sample::SampleFormat};
+use bytes::{BufMut, BytesMut};
 
 #[derive(Debug, Default)]
 pub struct TagStruct {
@@ -29,27 +30,18 @@ impl TagStruct {
         Ok(Self { values })
     }
 
-    pub fn write_to<W>(&self, writer: &mut W) -> Result<()>
-    where
-        W: Write,
-    {
+    pub fn to_bytes(&self) -> Result<BytesMut> {
+        let mut bytes = BytesMut::new();
+
         for value in &self.values {
-            value.write_to(writer)?;
+            value.write_to_bytes(&mut bytes)?;
         }
 
-        Ok(())
+        Ok(bytes)
     }
 
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
-    }
-
-    pub fn to_vec(&self) -> Result<Vec<u8>> {
-        let mut data = Vec::new();
-
-        self.write_to(&mut data)?;
-
-        Ok(data)
     }
 
     pub fn put<V: Put>(&mut self, value: V) {
@@ -187,68 +179,65 @@ impl Value {
         })
     }
 
-    pub fn write_to<W>(&self, writer: &mut W) -> Result<()>
-    where
-        W: Write,
-    {
+    pub fn write_to_bytes(&self, bytes: &mut BytesMut) -> Result<()> {
         match self {
             Self::Bool(value) => match value {
-                true => writer.write_u8(tag::BOOLEAN_TRUE)?,
-                false => writer.write_u8(tag::BOOLEAN_FALSE)?,
+                true => bytes.put_u8(tag::BOOLEAN_TRUE),
+                false => bytes.put_u8(tag::BOOLEAN_FALSE),
             },
             Self::U8(value) => {
-                writer.write_u8(tag::U8)?;
-                writer.write_u8(*value)?;
+                bytes.put_u8(tag::U8);
+                bytes.put_u8(*value);
             },
             Self::U32(value) => {
-                writer.write_u8(tag::U32)?;
-                writer.write_u32::<BE>(*value)?;
+                bytes.put_u8(tag::U32);
+                bytes.put_u32(*value);
             },
             Self::Arbitrary(value) => {
-                writer.write_u8(tag::ARBITRARY)?;
+                bytes.put_u8(tag::ARBITRARY);
                 let len = u32::try_from(value.len())
                     .context("Arbitrary value len exceeds 32 bits")?;
-                writer.write_u32::<BE>(len)?;
-                writer.write_all(value)?;
+                bytes.put_u32(len);
+                bytes.put_slice(value);
             },
             Self::String(value) => {
                 match value {
                     Some(value) => {
-                        writer.write_u8(tag::STRING)?;
+                        bytes.put_u8(tag::STRING);
                         let value = truncate_to_before_first_null(value);
-                        writer.write_all(value.as_bytes())?;
-                        writer.write_u8(b'\0')?;
+                        bytes.put_slice(value.as_bytes());
+                        bytes.put_u8(b'\0');
                     },
                     None => {
-                        writer.write_u8(tag::STRING_NULL)?;
+                        bytes.put_u8(tag::STRING_NULL);
                         return Ok(());
                     }
                 };
             },
             Value::SampleSpec(spec) => {
-                writer.write_u8(tag::SAMPLE_SPEC)?;
-                writer.write_u8(spec.format.into())?;
-                writer.write_u8(spec.channels)?;
-                writer.write_u32::<BE>(spec.rate)?;
+                bytes.put_u8(tag::SAMPLE_SPEC);
+                bytes.put_u8(spec.format.into());
+                bytes.put_u8(spec.channels);
+                bytes.put_u32(spec.rate);
             },
             Value::ChannelMap(map) => {
-                writer.write_u8(tag::CHANNEL_MAP)?;
+                bytes.put_u8(tag::CHANNEL_MAP);
 
                 let num_channels = CHANNELS_MAX.min(map.positions.len());
-                writer.write_u8(num_channels as u8)?;
+                bytes.put_u8(num_channels as u8);
 
                 for &position in map.positions.iter().take(num_channels) {
-                    writer.write_u8(position.into())?;
+                    bytes.put_u8(position.into());
                 }
             },
             Value::ChannelVolume(volume) => {
-                writer.write_u8(tag::CVOLUME)?;
+                bytes.put_u8(tag::CVOLUME);
 
                 let num_channels = CHANNELS_MAX.min(volume.volumes.len());
-                writer.write_u8(num_channels as u8)?;
+                bytes.put_u8(num_channels as u8);
 
                 for &volume in volume.volumes.iter().take(num_channels) {
-                    writer.write_u32::<BE>(volume)?;
+                    bytes.put_u32(volume);
                 }
             },
         }

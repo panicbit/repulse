@@ -18,15 +18,12 @@ pub struct Frame {
 
 impl Frame {
     pub fn command(packet: &TagStruct) -> Result<Frame> {
-        let mut data = BytesMut::new();
-        packet.write_to(&mut (&mut data).writer())?;
-
         Ok(Self {
             channel: COMMAND_CHANNEL,
             offset_hi: 0,
             offset_low: 0,
             flags: 0,
-            data,
+            data: packet.to_bytes()?,
         })
     }
 
