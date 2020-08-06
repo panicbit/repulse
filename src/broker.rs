@@ -37,23 +37,26 @@ where
     (Box::new(send_frame), abort_handle)
 }
 
-async fn read_loop<R, OnFrame>(mut reader: R, mut on_frame: OnFrame, abort_handle: AbortHandle)
+async fn read_loop<R, OnFrame>(reader: R, mut on_frame: OnFrame, abort_handle: AbortHandle)
 where
     R: AsyncRead + Unpin,
     OnFrame: FnMut(Result<Frame>) + Send + 'static,
 {
-    loop {
-        let result = Frame::read_from(&mut reader).await
-            .context("Failed to read frame");
-        let error_occurred = result.is_err();
+    let mut frames = Frame::stream(reader);
 
-        on_frame(result);
+    while let Some(frame) = frames.next().await {
+        let frame = frame.context("Failed to read frame");
+        let error_occurred = frame.is_err();
+
+        on_frame(frame);
 
         if error_occurred {
             abort_handle.abort();
             return;
         }
     }
+
+    abort_handle.abort();
 }
 
 async fn write_loop<W>(
