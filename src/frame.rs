@@ -44,28 +44,6 @@ impl Frame {
         Ok(())
     }
 
-    pub async fn read_from<R>(reader: &mut R) -> Result<Self>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let size = reader.read_u32().await?;
-        let channel = reader.read_u32().await?;
-        let offset_hi = reader.read_u32().await?;
-        let offset_low = reader.read_u32().await?;
-        let flags = reader.read_u32().await?;
-        let mut data = vec![0; size as usize];
-        reader.read_exact(&mut data).await?;
-        let data = BytesMut::from(&*data);
-
-        Ok(Self {
-            channel,
-            offset_hi,
-            offset_low,
-            flags,
-            data,
-        })
-    }
-
     pub fn stream<R: AsyncRead>(reader: R) -> FramedRead<R, FrameDecoder> {
         FramedRead::new(reader, FrameDecoder::default())
     }
