@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use std::io::{Read, Write, Cursor, BufRead};
+use std::io::{Read, Cursor, BufRead};
 use anyhow::*;
-use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use byteorder::{ReadBytesExt, BE};
 use crate::{channel::{ChannelPosition, CHANNELS_MAX}, sample::SampleFormat};
 use bytes::{BufMut, BytesMut};
 

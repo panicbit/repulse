@@ -1,9 +1,6 @@
 use anyhow::*;
 use futures::prelude::*;
-use tokio::{
-    fs,
-    time::{self, Duration},
-};
+use tokio::time::{self, Duration};
 use crate::{
     tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume},
     command::{CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply},

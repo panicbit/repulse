@@ -2,7 +2,7 @@ use anyhow::*;
 use tokio::prelude::*;
 use crate::TagStruct;
 use tokio_util::codec::{FramedRead, Decoder};
-use bytes::{Buf, BytesMut, buf::BufMutExt};
+use bytes::{Buf, BytesMut};
 use std::{mem::size_of, convert::TryFrom};
 
 pub const COMMAND_CHANNEL: u32 = u32::max_value();
