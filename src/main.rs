@@ -29,7 +29,7 @@ async fn play_raw_audio_forever(client: Client, name: &'static str, file_name: &
     eprintln!("Creating playback stream");
 
     let sample_spec = SampleSpec::pcm_signed_16bit_little_endian_stereo_44100hz();
-    let channel_map = ChannelMap::default_stereo();
+    let channel_map = ChannelMap::stereo();
     let stream = client.create_playback_stream(name, sample_spec, channel_map).await?;
 
     println!("Reading audio");

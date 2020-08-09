@@ -313,7 +313,15 @@ pub struct ChannelMap {
 }
 
 impl ChannelMap {
-    pub fn default_stereo() -> Self {
+    pub fn mono() -> Self {
+        Self {
+            positions: vec![
+                ChannelPosition::Mono,
+            ],
+        }
+    }
+
+    pub fn stereo() -> Self {
         Self {
             positions: vec![
                 ChannelPosition::FrontLeft,
