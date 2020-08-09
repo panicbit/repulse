@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     let mut reader = audrey::read::open(&filename)
         .context("Failed to open file")?;
     
-    let info = reader.description();
+    let info = dbg!(reader.description());
     let sample_spec = SampleSpec {
         format: SampleFormat::S16LE,
         channels: info.channel_count() as u8,
