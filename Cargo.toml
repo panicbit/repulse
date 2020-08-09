@@ -17,3 +17,7 @@ bytes = "0.5.6"
 
 [dev-dependencies]
 audrey = "0.2.0"
+
+[patch.crates-io]
+audrey = { git = "https://github.com/panicbit/audrey", branch = "fix_flac_samples" }
+# audrey = { path = "audrey" }
