@@ -296,10 +296,31 @@ pub struct SampleSpec {
     pub rate: u32,
 }
 
+impl SampleSpec {
+    pub fn pcm_signed_16bit_little_endian_stereo_44100hz() -> Self {
+        Self {
+            format: SampleFormat::S16LE,
+            channels: 2,
+            rate: 44100,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ChannelMap {
     /// Channel positions
     pub positions: Vec<ChannelPosition>, // Use SmallVec?
+}
+
+impl ChannelMap {
+    pub fn default_stereo() -> Self {
+        Self {
+            positions: vec![
+                ChannelPosition::FrontLeft,
+                ChannelPosition::FrontRight,
+            ],
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -44,24 +44,16 @@ async fn play_raw_audio_forever(client: Client, name: &'static str, file_name: &
     let data = fs::read(file_name).await?;
     let sample_rate: usize = 44_100;
     let num_channels: usize = 2;
+    let bit_depth = 2;
 
     eprintln!("Creating playback stream");
 
-    let sample_spec = SampleSpec {
-        format: SampleFormat::S16LE,
-        channels: num_channels as u8,
-        rate: sample_rate as u32,
-    };
-    let channel_map = ChannelMap {
-        positions: vec![
-            ChannelPosition::FrontLeft,
-            ChannelPosition::FrontRight,
-        ],
-    };
+    let sample_spec = SampleSpec::pcm_signed_16bit_little_endian_stereo_44100hz();
+    let channel_map = ChannelMap::default_stereo();
     let stream = client.create_playback_stream(name, sample_spec, channel_map).await?;
 
     println!("Reading audio");
-    let bytes_per_second: usize = 2 * num_channels * sample_rate;
+    let bytes_per_second: usize = bit_depth * num_channels * sample_rate;
     let mut interval = time::interval(Duration::from_secs(1));
 
     for chunk in data.chunks(bytes_per_second).cycle() {
