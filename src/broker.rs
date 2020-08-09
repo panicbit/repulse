@@ -10,10 +10,11 @@ type FrameTransmitter = mpsc::Sender<(Frame, oneshot::Sender<Result<()>>)>;
 type FrameReceiver = mpsc::Receiver<(Frame, oneshot::Sender<Result<()>>)>;
 pub type SendFrame = Box<dyn Fn(Frame) -> BoxFuture<'static, Result<()>> + Send>;
 
-pub(crate) fn start_broker<S, OnFrame>(stream: S, on_frame: OnFrame) -> (SendFrame, AbortHandle)
+pub(crate) fn start_broker<S, OnFrame, Fut>(stream: S, on_frame: OnFrame) -> (SendFrame, AbortHandle)
 where
     S: AsyncRead + AsyncWrite + Send + 'static,
-    OnFrame: FnMut(Result<Frame>) + Send + 'static,
+    OnFrame: FnMut(Result<Frame>) -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
 {
     let (reader, writer) = io::split(stream);
     let (frame_tx, frame_rx) = mpsc::channel(1024);
@@ -37,10 +38,11 @@ where
     (Box::new(send_frame), abort_handle)
 }
 
-async fn read_loop<R, OnFrame>(reader: R, mut on_frame: OnFrame, abort_handle: AbortHandle)
+async fn read_loop<R, OnFrame, Fut>(reader: R, mut on_frame: OnFrame, abort_handle: AbortHandle)
 where
     R: AsyncRead + Unpin,
-    OnFrame: FnMut(Result<Frame>) + Send + 'static,
+    OnFrame: FnMut(Result<Frame>) -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send,
 {
     let mut frames = Frame::stream(reader);
 
@@ -48,7 +50,8 @@ where
         let frame = frame.context("Failed to read frame");
         let error_occurred = frame.is_err();
 
-        on_frame(frame);
+        eprintln!("Calling on_frame");
+        on_frame(frame).await;
 
         if error_occurred {
             abort_handle.abort();

@@ -4,7 +4,6 @@ use tokio::{fs, time::{self, Duration}};
 use crate::{
     tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume},
     command::{CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply},
-    frame::Frame,
     sample::SampleFormat,
     channel::ChannelPosition,
 };
@@ -16,6 +15,7 @@ pub use crate::{
 mod broker;
 mod tag_struct;
 mod client;
+mod stream;
 mod command;
 mod frame;
 mod sample;
@@ -31,62 +31,43 @@ async fn main() -> Result<()> {
     let client = Client::connect().await
         .context("Failed to create client")?;
 
-    let server_info = client.get_server_info().await
-        .context("Failed to get server info")?;
+    let track_1 = tokio::spawn(play_raw_audio_forever(client.clone(), "🦀 Repulse - Track 1 🦀", "/tmp/audio1.raw"));
+    // let track_2 = tokio::spawn(play_raw_audio_forever(client.clone(), "🦀 Repulse - Track 2 🦀", "/tmp/audio2.raw"));
 
-    println!("{:#?}", server_info);
+    track_1.await??;
+    // track_2.await??;
 
-    let data = fs::read("/tmp/audio.raw").await?;
+    Ok(())
+}
+
+async fn play_raw_audio_forever(client: Client, name: &'static str, file_name: &'static str) -> Result<()> {
+    let data = fs::read(file_name).await?;
     let sample_rate: usize = 44_100;
     let num_channels: usize = 2;
 
-    let reply = client.send_command::<_, CreatePlaybackStreamReply>(CreatePlaybackStream {
-        name: "🦀 Repulse - Native Rust Client 🦀".into(),
-        sample_spec: SampleSpec {
-            format: SampleFormat::S16LE,
-            channels: num_channels as u8,
-            rate: sample_rate as u32,
-        },
-        channel_map: ChannelMap {
-            positions: vec![
-                ChannelPosition::FrontLeft,
-                ChannelPosition::FrontRight,
-            ],
-        },
-        sink_ref: SinkRef::name("@DEFAULT_SINK@"),
-        max_length: u32::MAX,
-        corked: false,
-        t_length: u32::MAX,
-        prebuf: u32::MAX,
-        min_req: u32::MAX,
-        sync_id: 0,
-        volume: ChannelVolume {
-            volumes: vec![
-                VOLUME_NORMAL,
-                VOLUME_NORMAL,
-            ],
-        },
+    eprintln!("Creating playback stream");
 
-    }).await?;
-
-    println!("{:#?}", reply);
+    let sample_spec = SampleSpec {
+        format: SampleFormat::S16LE,
+        channels: num_channels as u8,
+        rate: sample_rate as u32,
+    };
+    let channel_map = ChannelMap {
+        positions: vec![
+            ChannelPosition::FrontLeft,
+            ChannelPosition::FrontRight,
+        ],
+    };
+    let stream = client.create_playback_stream(name, sample_spec, channel_map).await?;
 
     println!("Reading audio");
     let bytes_per_second: usize = 2 * num_channels * sample_rate;
     let mut interval = time::interval(Duration::from_secs(1));
 
     for chunk in data.chunks(bytes_per_second).cycle() {
-        let frame = Frame {
-            channel: reply.index,
-            offset_hi: 0,
-            offset_low: 0,
-            flags: 0,
-            data: chunk.into(),
-        };
-
         interval.next().await;
-        client.send_frame(frame).await?;
+        stream.write_slice(chunk).await?;
     }
 
-    Ok(())
+    unreachable!()
 }
