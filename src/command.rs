@@ -1,7 +1,7 @@
 use num_enum::{TryFromPrimitive, IntoPrimitive};
 use anyhow::*;
-use crate::{tag_struct, TagStruct, INVALID_INDEX};
-use tag_struct::{ChannelMap, SampleSpec, ChannelVolume};
+use crate::{tag_struct, INVALID_INDEX};
+use tag_struct::{TagStruct, ChannelMap, SampleSpec, ChannelVolume};
 
 pub trait Command {
     const KIND: CommandKind;

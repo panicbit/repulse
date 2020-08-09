@@ -1,30 +1,10 @@
 use anyhow::*;
 use futures::prelude::*;
 use tokio::{fs, time::{self, Duration}};
-use crate::{
-    tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume},
-    command::{CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply},
-    sample::SampleFormat,
-    channel::ChannelPosition,
+use repulse::{
+    Client,
+    tag_struct::{SampleSpec, ChannelMap},
 };
-
-pub use crate::{
-    client::Client,
-};
-
-mod broker;
-mod tag_struct;
-mod client;
-mod stream;
-mod command;
-mod frame;
-mod sample;
-mod channel;
-mod error;
-
-pub const VOLUME_NORMAL: u32 = 0x10000;
-pub const PROTOCOL_VERSION: u32 = 8;
-pub const INVALID_INDEX: u32 = u32::MAX;
 
 #[tokio::main]
 async fn main() -> Result<()> {

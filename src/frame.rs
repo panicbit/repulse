@@ -1,9 +1,9 @@
 use anyhow::*;
 use tokio::prelude::*;
-use crate::TagStruct;
 use tokio_util::codec;
 use bytes::{Buf, BytesMut, BufMut};
 use std::{mem::size_of, convert::TryFrom};
+use crate::tag_struct::TagStruct;
 
 pub const COMMAND_CHANNEL: u32 = u32::max_value();
 
