@@ -1,6 +1,6 @@
 use anyhow::*;
 use futures::prelude::*;
-use tokio::time::{self, Duration};
+use tokio::{fs, time::{self, Duration}};
 use crate::{
     tag_struct::{SampleSpec, TagStruct, ChannelMap, ChannelVolume},
     command::{CreatePlaybackStream, SinkRef, CreatePlaybackStreamReply},
@@ -36,12 +36,16 @@ async fn main() -> Result<()> {
 
     println!("{:#?}", server_info);
 
-    let mut reply = client.send_command::<_, CreatePlaybackStreamReply>(CreatePlaybackStream {
+    let data = fs::read("/tmp/audio.raw").await?;
+    let sample_rate: usize = 44_100;
+    let num_channels: usize = 2;
+
+    let reply = client.send_command::<_, CreatePlaybackStreamReply>(CreatePlaybackStream {
         name: "🦀 Repulse - Native Rust Client 🦀".into(),
         sample_spec: SampleSpec {
             format: SampleFormat::S16LE,
-            channels: 2,
-            rate: 44100,
+            channels: num_channels as u8,
+            rate: sample_rate as u32,
         },
         channel_map: ChannelMap {
             positions: vec![
@@ -49,7 +53,7 @@ async fn main() -> Result<()> {
                 ChannelPosition::FrontRight,
             ],
         },
-        sink_ref: SinkRef::index(0),
+        sink_ref: SinkRef::name("@DEFAULT_SINK@"),
         max_length: u32::MAX,
         corked: false,
         t_length: u32::MAX,
@@ -58,8 +62,8 @@ async fn main() -> Result<()> {
         sync_id: 0,
         volume: ChannelVolume {
             volumes: vec![
-                VOLUME_NORMAL / 2,
-                VOLUME_NORMAL / 2,
+                VOLUME_NORMAL,
+                VOLUME_NORMAL,
             ],
         },
 
@@ -67,12 +71,11 @@ async fn main() -> Result<()> {
 
     println!("{:#?}", reply);
 
-    let data = include_bytes!("/tmp/audio.raw");
-
-    let bytes_per_second = 2 * 2 * 44100;
+    println!("Reading audio");
+    let bytes_per_second: usize = 2 * num_channels * sample_rate;
     let mut interval = time::interval(Duration::from_secs(1));
 
-    for chunk in data.chunks(bytes_per_second) {
+    for chunk in data.chunks(bytes_per_second).cycle() {
         let frame = Frame {
             channel: reply.index,
             offset_hi: 0,
