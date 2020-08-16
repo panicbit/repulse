@@ -17,7 +17,12 @@ bytes = "0.5.6"
 
 [dev-dependencies]
 audrey = "0.2.0"
+lewton = { version = "0.10.1", features = ["async_ogg"] }
+ogg = { version = "0.7", features = ["async"] }
+reqwest = { version = "0.10.7", features = ["stream"] }
 
 [patch.crates-io]
 audrey = { git = "https://github.com/panicbit/audrey", branch = "fix_flac_samples" }
+lewton = { version = "0.10.1", git = "https://github.com/panicbit/lewton", branch = "futures_03" }
+ogg = { version = "0.7", git = "https://github.com/panicbit/ogg", branch = "futures_03" }
 # audrey = { path = "audrey" }
